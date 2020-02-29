@@ -1,4 +1,4 @@
-package tracing
+package exporter
 
 import (
 	"bytes"
