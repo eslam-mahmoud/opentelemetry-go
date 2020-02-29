@@ -1,10 +1,14 @@
 package exporter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
 
+	kitlog "github.com/go-kit/kit/log"
 	"go.opentelemetry.io/otel/sdk/export/trace"
 )
 
@@ -17,8 +21,7 @@ type Exporter struct {
 	serviceName       string
 	debugging         bool
 	spans             []*trace.SpanData
-	// TODO
-	// logger            logger
+	logger            kitlog.Logger
 }
 
 // Options constructor options for Exporter
@@ -27,18 +30,22 @@ type Options struct {
 	APIKey      string
 	ServiceName string
 	Debugging   bool
-	// TODO
-	// logger            logger
+	Logger      kitlog.Logger
 }
 
 // NewExporter constructor for Exporter
 func NewExporter(opts Options) (*Exporter, error) {
+	if opts.Logger != nil {
+		opts.Logger = kitlog.With(kitlog.NewJSONLogger(os.Stderr), "ts", kitlog.DefaultTimestampUTC)
+	}
+
 	return &Exporter{
 		endpoint:    opts.Endpoint,
 		apiKey:      opts.APIKey,
 		serviceName: opts.ServiceName,
 		backoff:     1,
 		debugging:   opts.Debugging,
+		logger:      opts.Logger,
 	}, nil
 }
 
@@ -66,35 +73,48 @@ func (e *Exporter) sendSpans(ctx context.Context) {
 	// encode
 	spanBytes, err := json.Marshal(e.spans)
 	if err != nil {
-		// TODO log
-		// fmt.Println(err)
+		e.logger.Log(
+			"message", "could not Marshal spans body",
+			"severity", "CRITICAL",
+			"spans", e.spans,
+			"err", err,
+		)
 		return
 	}
 	if e.debugging {
-		// TOD should use logger
-		fmt.Println(string(spanBytes))
+		e.logger.Log(
+			"message", "debugging spans body",
+			"severity", "DEBUG",
+			"spans", e.spans,
+			"backoff", e.backoff,
+		)
 	}
 
-	// // send HTTP req to the endpoint
-	// req, err := http.NewRequest("POST", e.endpoint, bytes.NewBuffer(spanBytes))
-	// req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	// req.Header.Set("Content-Type", "application/json")
-	// client := &http.Client{}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	// TODO log
-	// 	// TODO cache the req and attemp resent it bassed on the response status code
-	// 	e.backoff = 2 * e.backoff
-	// 	return
-	// }
-	// defer resp.Body.Close()
-	// ioutil.ReadAll(resp.Body) // TODO defer ?!
-	// // TODO update latest communication field to use backoff and caching
+	// send HTTP req to the endpoint
+	req, err := http.NewRequestWithContext(ctx, "POST", e.endpoint, bytes.NewBuffer(spanBytes))
+	req.Header.Set("Authorization", "Bearer "+e.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		e.logger.Log(
+			"message", "could not send spans body to API",
+			"severity", "CRITICAL",
+			"spans", e.spans,
+			"err", err,
+		)
+		// TODO cache the req and attemp resent it bassed on the response status code
+		e.backoff = 2 * e.backoff
+		return
+	}
+	defer resp.Body.Close()
+	ioutil.ReadAll(resp.Body) // TODO defer ?!
+	// TODO update latest communication field to use backoff and caching
 
-	// // fmt.Println("response Status:", resp.Status)
-	// // fmt.Println("response Headers:", resp.Header)
-	// // body, _ := ioutil.ReadAll(resp.Body)
-	// // fmt.Println("response Body:", string(body))
+	// fmt.Println("response Status:", resp.Status)
+	// fmt.Println("response Headers:", resp.Header)
+	// body, _ := ioutil.ReadAll(resp.Body)
+	// fmt.Println("response Body:", string(body))
 }
 
 // Shutdown TODO empliment
