@@ -43,7 +43,6 @@ func NewExporter(opts Options) (*Exporter, error) {
 		endpoint:    opts.Endpoint,
 		apiKey:      opts.APIKey,
 		serviceName: opts.ServiceName,
-		backoff:     1,
 		debugging:   opts.Debugging,
 		logger:      opts.Logger,
 	}, nil
@@ -97,14 +96,19 @@ func (e *Exporter) sendSpans(ctx context.Context) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		if e.backoff == 0 {
+			e.backoff = 1
+		} else {
+			e.backoff = 2 * e.backoff
+		}
 		e.logger.Log(
 			"message", "could not send spans body to API",
 			"severity", "CRITICAL",
 			"spans", e.spans,
 			"err", err,
+			"backoff", e.backoff,
 		)
-		// TODO cache the req and attemp resent it bassed on the response status code
-		e.backoff = 2 * e.backoff
+		// spans are cached and will be sent with the next req
 		return
 	}
 	defer resp.Body.Close()
