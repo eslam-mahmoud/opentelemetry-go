@@ -1,12 +1,9 @@
 package exporter
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 
 	"go.opentelemetry.io/otel/sdk/export/trace"
 )
@@ -18,6 +15,7 @@ type Exporter struct {
 	endpoint          string
 	apiKey            string
 	serviceName       string
+	debugging         bool
 	spans             []*trace.SpanData
 	// TODO
 	// logger            logger
@@ -28,6 +26,7 @@ type Options struct {
 	Endpoint    string
 	APIKey      string
 	ServiceName string
+	Debugging   bool
 	// TODO
 	// logger            logger
 }
@@ -39,6 +38,7 @@ func NewExporter(opts Options) (*Exporter, error) {
 		apiKey:      opts.APIKey,
 		serviceName: opts.ServiceName,
 		backoff:     1,
+		debugging:   opts.Debugging,
 	}, nil
 }
 
@@ -65,33 +65,36 @@ func (e *Exporter) sendSpans(ctx context.Context) {
 
 	// encode
 	spanBytes, err := json.Marshal(e.spans)
-	fmt.Println(string(spanBytes))
 	if err != nil {
 		// TODO log
 		// fmt.Println(err)
 		return
 	}
-
-	// send HTTP req to the endpoint
-	req, err := http.NewRequest("POST", e.endpoint, bytes.NewBuffer(spanBytes))
-	req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		// TODO log
-		// TODO cache the req and attemp resent it bassed on the response status code
-		e.backoff = 2 * e.backoff
-		return
+	if e.debugging {
+		// TOD should use logger
+		fmt.Println(string(spanBytes))
 	}
-	defer resp.Body.Close()
-	ioutil.ReadAll(resp.Body) // TODO defer ?!
-	// TODO update latest communication field to use backoff and caching
 
-	// fmt.Println("response Status:", resp.Status)
-	// fmt.Println("response Headers:", resp.Header)
-	// body, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println("response Body:", string(body))
+	// // send HTTP req to the endpoint
+	// req, err := http.NewRequest("POST", e.endpoint, bytes.NewBuffer(spanBytes))
+	// req.Header.Set("Authorization", "Bearer "+e.apiKey)
+	// req.Header.Set("Content-Type", "application/json")
+	// client := &http.Client{}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	// TODO log
+	// 	// TODO cache the req and attemp resent it bassed on the response status code
+	// 	e.backoff = 2 * e.backoff
+	// 	return
+	// }
+	// defer resp.Body.Close()
+	// ioutil.ReadAll(resp.Body) // TODO defer ?!
+	// // TODO update latest communication field to use backoff and caching
+
+	// // fmt.Println("response Status:", resp.Status)
+	// // fmt.Println("response Headers:", resp.Header)
+	// // body, _ := ioutil.ReadAll(resp.Body)
+	// // fmt.Println("response Body:", string(body))
 }
 
 // Shutdown TODO empliment
