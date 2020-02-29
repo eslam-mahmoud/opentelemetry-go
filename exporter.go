@@ -35,7 +35,7 @@ type Options struct {
 
 // NewExporter constructor for Exporter
 func NewExporter(opts Options) (*Exporter, error) {
-	if opts.Logger != nil {
+	if opts.Logger == nil {
 		opts.Logger = kitlog.With(kitlog.NewJSONLogger(os.Stderr), "ts", kitlog.DefaultTimestampUTC)
 	}
 
